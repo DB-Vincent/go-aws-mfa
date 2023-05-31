@@ -20,11 +20,22 @@ import (
 	"os"
 	"path"
 	"log"
+	"fmt"
+	"context"
 
 	"github.com/spf13/cobra"
+	
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+
+	"github.com/AlecAivazis/survey/v2"
+	"github.com/go-ini/ini"
 )
 
-var awsConfigPath string
+var awsCredPath string
+var awsProfile string
 
 var rootCmd = &cobra.Command{
 	Use:   "go-aws-mfa",
@@ -37,7 +48,130 @@ enabling secure access to AWS resources and services.
 With its user-friendly interface and seamless integration with AWS IAM, 
 go-aws-mfa empowers developers and system administrators to enhance the security of 
 their AWS accounts by enforcing MFA authentication in a convenient and efficient manner.`,
-	// Run: func(cmd *cobra.Command, args []string) { },
+	Run: func(cmd *cobra.Command, args []string) {
+		credFile, err := ini.Load(awsCredPath)
+		_, err = credFile.GetSection(fmt.Sprintf("%s-mfa", awsProfile))
+		if err != nil {
+			fmt.Printf("❌ AWS Profile not available! Please suffix the profile you want to use with \"-mfa\". e.g. [default] -> [default-mfa]\n")
+			return
+		} else {
+			_, err = credFile.GetSection(awsProfile)
+
+			if err == nil {
+				authenticated := testAuthentication(awsProfile)
+				if authenticated == nil {
+					fmt.Printf("ℹ Already authenticated!\n")
+					return
+				}
+			}
+		}
+
+		conf, err := config.LoadDefaultConfig(context.TODO(),
+			config.WithRegion("eu-west-1"),
+			config.WithSharedConfigProfile(fmt.Sprintf("%s-mfa", awsProfile)),
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		_iam := iam.NewFromConfig(conf)
+
+		devices, err := _iam.ListMFADevices(context.TODO(), &iam.ListMFADevicesInput{})
+		if err != nil {
+			fmt.Printf("❌ An error occurred while listing MFA devices!\nError: %s\n", err.Error())
+			return
+		}
+
+		var mfaDevices []string
+
+		if len(devices.MFADevices) > 1 {
+			for _, device := range devices.MFADevices {
+				mfaDevices = append(mfaDevices, *device.SerialNumber)
+			}
+		} else if len(devices.MFADevices) == 1 {
+			mfaDevices = append(mfaDevices, *devices.MFADevices[0].SerialNumber)
+		} else {
+			fmt.Printf("❌ No mfa device found!")
+			return
+		}
+
+		var qs = []*survey.Question{
+			{
+				Name: "mfaDevice",
+				Prompt: &survey.Select{
+					Message: "Choose a MFA device:",
+					Options: mfaDevices,
+				},
+			},
+			{
+				Name:     "mfaCode",
+				Prompt:   &survey.Input{Message: "Please enter the MFA code for the given MFA device:"},
+				Validate: survey.ComposeValidators(survey.MinLength(6), survey.MaxLength(6), survey.Required),
+			},
+		}
+
+		answers := struct {
+			MfaDevice string `survey:"mfaDevice"`
+			MfaCode string `survey:"mfaCode"`
+		}{}
+
+		err = survey.Ask(qs, &answers)
+		if err != nil {
+			if err.Error() == "interrupt" {
+				fmt.Printf("ℹ Alright then, keep your secrets! Exiting..\n")
+				return
+			} else {
+				log.Fatal(err.Error())
+			}
+		}
+
+		_sts := sts.NewFromConfig(conf)
+		session, err := _sts.GetSessionToken(context.TODO(), &sts.GetSessionTokenInput{
+			TokenCode:    &answers.MfaCode,
+			SerialNumber: &answers.MfaDevice,
+		})
+		if err != nil {
+			fmt.Printf("❌ An error occurred while retrieving session token for %s!\nError: %s\n", answers.MfaDevice, err.Error())
+			return
+		}
+
+		_, err = credFile.GetSection(awsProfile)
+		var sec *ini.Section
+		if err != nil {
+			sec = credFile.Section(awsProfile)
+		} else {
+			sec, err = credFile.NewSection(awsProfile)
+			if err != nil {
+				fmt.Printf("❌ An error occurred while creating a new entry in the AWS credentials file!\nError: %s\n", err.Error())
+				return
+			}
+		}
+		
+		sec.NewKey("aws_access_key_id", *session.Credentials.AccessKeyId)
+		sec.NewKey("aws_secret_access_key", *session.Credentials.SecretAccessKey)
+		sec.NewKey("aws_session_token", *session.Credentials.SessionToken)
+
+		credFile.SaveTo(awsCredPath)
+	},
+}
+
+func testAuthentication(profileName string) error {
+	conf, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion("eu-west-1"),
+		config.WithSharedConfigProfile(profileName),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_s3 := s3.NewFromConfig(conf)
+
+	_, err = _s3.ListBuckets(context.TODO(), &s3.ListBucketsInput{})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func Execute() {
@@ -47,11 +181,16 @@ func Execute() {
 	}
 }
 
+func SetVersionInfo(version, commit, date string) {
+	rootCmd.Version = fmt.Sprintf("%s (Built on %s from Git SHA %s)", version, date, commit)
+}
+
 func init() {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	rootCmd.PersistentFlags().StringVar(&awsConfigPath, "config", path.Join(home, ".aws/config"), "AWS config file location")
+	rootCmd.PersistentFlags().StringVar(&awsCredPath, "config", path.Join(home, ".aws/credentials"), "AWS credentials file location")
+	rootCmd.PersistentFlags().StringVar(&awsProfile, "profile", "default", "AWS Profile for which we need to request a MFA token")
 }
