@@ -22,13 +22,13 @@ import (
 	"log"
 	"fmt"
 	"context"
+	"time"
 
 	"github.com/spf13/cobra"
 	
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/go-ini/ini"
@@ -54,15 +54,21 @@ their AWS accounts by enforcing MFA authentication in a convenient and efficient
 		if err != nil {
 			fmt.Printf("❌ AWS Profile not available! Please suffix the profile you want to use with \"-mfa\". e.g. [default] -> [default-mfa]\n")
 			return
-		} else {
-			_, err = credFile.GetSection(awsProfile)
+		}
 
-			if err == nil {
-				authenticated := testAuthentication(awsProfile)
-				if authenticated == nil {
-					fmt.Printf("ℹ Already authenticated!\n")
-					return
-				}
+		profile, err := credFile.GetSection(awsProfile)
+		if err == nil {
+			currentTime := time.Now()
+			expiration, err := time.Parse("2006-01-02 15:04:05", profile.Key("expiration").String())
+	
+			if err != nil {
+				fmt.Printf("❌ Expiration (%s) in profile \"%s\" is in the wrong format (2006-01-02 15:04:05)!\nError: %s\n", profile.Key("expiration").String(), fmt.Sprintf("%s-mfa", awsProfile), err.Error())
+				return
+			}
+	
+			if (expiration.After(currentTime)) {
+				fmt.Printf("ℹ You're still authenticated! Your credential will expire at %s.\n", expiration.Format("2006-01-02 15:04:05"))
+				return
 			}
 		}
 
@@ -150,28 +156,10 @@ their AWS accounts by enforcing MFA authentication in a convenient and efficient
 		sec.NewKey("aws_access_key_id", *session.Credentials.AccessKeyId)
 		sec.NewKey("aws_secret_access_key", *session.Credentials.SecretAccessKey)
 		sec.NewKey("aws_session_token", *session.Credentials.SessionToken)
+		sec.NewKey("expiration", session.Credentials.Expiration.Format("2006-01-02 15:04:05"))
 
 		credFile.SaveTo(awsCredPath)
 	},
-}
-
-func testAuthentication(profileName string) error {
-	conf, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion("eu-west-1"),
-		config.WithSharedConfigProfile(profileName),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	_s3 := s3.NewFromConfig(conf)
-
-	_, err = _s3.ListBuckets(context.TODO(), &s3.ListBucketsInput{})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func Execute() {
