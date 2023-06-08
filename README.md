@@ -10,7 +10,7 @@ To install go-aws-mfa, you need to have Go installed on your system. Once Go is 
 #### Linux
 ```shell
 mkdir /tmp/go-aws-mfa
-wget -qO- https://github.com/DB-Vincent/go-aws-mfa/releases/download/v0.1.0/go-aws-mfa_Linux_x86_64.tar.gz | tar xvz -C /tmp/go-aws-mfa
+wget -qO- https://github.com/DB-Vincent/go-aws-mfa/releases/download/v0.1.1/go-aws-mfa_Linux_x86_64.tar.gz | tar xvz -C /tmp/go-aws-mfa
 mv /tmp/go-aws-mfa/go-aws-mfa ~/.local/bin/go-aws-mfa
 rm -rf /tmp/go-aws-mfa
 chmod +x ~/.local/bin/go-aws-mfa
@@ -20,7 +20,7 @@ You should now be able to execute the `go-aws-mfa` command and retrieve a tempra
 
 #### Windows
 ```powershell
-Invoke-WebRequest -Uri https://github.com/DB-Vincent/go-aws-mfa/releases/download/v0.1.0/go-aws-mfa_Windows_x86_64.zip -OutFile ~\Downloads\go-aws-mfa.zip
+Invoke-WebRequest -Uri https://github.com/DB-Vincent/go-aws-mfa/releases/download/v0.1.1/go-aws-mfa_Windows_x86_64.zip -OutFile ~\Downloads\go-aws-mfa.zip
 Expand-Archive ~\Downloads\go-aws-mfa.zip -DestinationPath ~\Downloads\go-aws-mfa
 Move-Item -Path ~\Downloads\go-aws-mfa -Destination ~/Documents/
 ```
