@@ -1,5 +1,7 @@
 # go-aws-mfa
 
+![go-aws-mfa demo](./demo/demo.gif)
+
 go-aws-mfa is a command-line interface (CLI) tool written in Go that simplifies the process of using AWS Multi-Factor Authentication (MFA) for authentication in the AWS CLI.
 
 ## Installation
