@@ -8,21 +8,23 @@ go-aws-mfa is a command-line interface (CLI) tool written in Go that simplifies 
 
 To install go-aws-mfa, you need to have Go installed on your system. Once Go is installed, you can use the following command to install go-aws-mfa:
 
-### Manual
-#### Linux
+### Linux
 ```shell
+export LATEST_VERSION=$(curl --silent "https://api.github.com/repos/DB-Vincent/go-aws-mfa/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 mkdir /tmp/go-aws-mfa
-wget -qO- https://github.com/DB-Vincent/go-aws-mfa/releases/download/v0.1.1/go-aws-mfa_Linux_x86_64.tar.gz | tar xvz -C /tmp/go-aws-mfa
-mv /tmp/go-aws-mfa/go-aws-mfa ~/.local/bin/go-aws-mfa
+wget -qO- https://github.com/DB-Vincent/go-aws-mfa/releases/download/$LATEST_VERSION/go-aws-mfa_Linux_x86_64.tar.gz | tar xvz -C /tmp/go-aws-mfa
+sudo mv /tmp/go-aws-mfa/go-aws-mfa /usr/local/bin/go-aws-mfa
 rm -rf /tmp/go-aws-mfa
-chmod +x ~/.local/bin/go-aws-mfa
+sudo chmod +x /usr/local/bin/go-aws-mfa
+unset LATEST_VERSION
 ```
 
 You should now be able to execute the `go-aws-mfa` command and retrieve a temprary MFA token.
 
-#### Windows
+### Windows
 ```powershell
-Invoke-WebRequest -Uri https://github.com/DB-Vincent/go-aws-mfa/releases/download/v0.1.1/go-aws-mfa_Windows_x86_64.zip -OutFile ~\Downloads\go-aws-mfa.zip
+$LATEST_VERSION = ((Invoke-WebRequest -Uri https://api.github.com/repos/DB-Vincent/go-aws-mfa/releases/latest).Content | ConvertFrom-JSON).tag_name
+Invoke-WebRequest -Uri https://github.com/DB-Vincent/go-aws-mfa/releases/download/$LATEST_VERSION/go-aws-mfa_Windows_x86_64.zip -OutFile ~\Downloads\go-aws-mfa.zip
 Expand-Archive ~\Downloads\go-aws-mfa.zip -DestinationPath ~\Downloads\go-aws-mfa
 Move-Item -Path ~\Downloads\go-aws-mfa -Destination ~/Documents/
 ```
